@@ -1,0 +1,55 @@
+#!/bin/sh
+# SPDX-License-Identifier: CC-BY-4.0
+# Copyright (c) 2026 sergeych and Ticktack contributors
+set -eu
+base=$(CDPATH= cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd)
+case "${1:-toggle}" in
+    credits) exec xdg-open "$base/credits.html" ;;
+    start|stop) exec systemctl --user "$1" ticktack.service ;;
+    toggle)
+        # Serialize concurrent launcher clicks; systemd owns the actual process lifetime.
+        exec 9>"${XDG_RUNTIME_DIR:?}/ticktack-toggle.lock"
+        flock 9
+        if systemctl --user is-active --quiet ticktack.service; then
+            systemctl --user stop ticktack.service
+        else
+            systemctl --user start ticktack.service
+        fi ;;
+    volume)
+        if [ "$#" -gt 2 ]; then echo 'Usage: ticktack volume [0..100]' >&2; exit 2; fi
+        shift
+        exec "$base/bin/ticktack-audio" --volume "$@" ;;
+    chime-volume)
+        if [ "$#" -gt 2 ]; then echo 'Usage: ticktack chime-volume [0..100]' >&2; exit 2; fi
+        shift
+        exec "$base/bin/ticktack-audio" --chime-volume "$@" ;;
+    chime)
+        case "${2:-status}" in
+            on) exec "$base/bin/ticktack-audio" --chime-enabled 1 ;;
+            off) exec "$base/bin/ticktack-audio" --chime-enabled 0 ;;
+            status)
+                if [ "$("$base/bin/ticktack-audio" --chime-enabled)" = 1 ]; then echo on; else echo off; fi ;;
+            *) echo 'Usage: ticktack chime [on|off]' >&2; exit 2 ;;
+        esac ;;
+    chime-test)
+        shift
+        # Validate before starting. Starting an already running service is idempotent.
+        case "${1:-hour}" in
+            15|30|45) [ "$#" = 1 ] || exit 2 ;;
+            hour)
+                [ "$#" -le 2 ] || exit 2
+                case "${2:-3}" in [1-9]|1[0-2]) ;; *) echo 'Hour must be 1..12' >&2; exit 2 ;; esac ;;
+            *) echo 'Usage: ticktack chime-test [15|30|45|hour [1..12]]' >&2; exit 2 ;;
+        esac
+        systemctl --user start ticktack.service
+        # --play watches settings before creating the PipeWire stream. Wait for service
+        # readiness using systemd's notification protocol, not a sleep or status loop.
+        if [ "$#" = 0 ]; then set -- hour 3; fi
+        exec "$base/bin/ticktack-audio" --test-chime "$@" ;;
+    status)
+        if systemctl --user is-active --quiet ticktack.service; then printf 'Playing'; else printf 'Stopped'; fi
+        printf ' · ticking %s%% · chime %s · chime volume %s%%\n' \
+            "$("$base/bin/ticktack-audio" --volume)" "$("$base/ticktack" chime)" \
+            "$("$base/bin/ticktack-audio" --chime-volume)" ;;
+    *) echo 'Usage: ticktack [start|stop|toggle|status|credits|volume [0..100]|chime [on|off]|chime-volume [0..100]|chime-test [15|30|45|hour [1..12]]]' >&2; exit 2 ;;
+esac

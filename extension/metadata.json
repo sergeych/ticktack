@@ -1,0 +1,8 @@
+{
+  "uuid": "ticktack@sergeych.local",
+  "name": "Ticktack",
+  "description": "A quiet pendulum clock: ticking, quarter-hour chimes and independent volumes. Requires the local Ticktack audio service.",
+  "shell-version": ["50"],
+  "version": 3,
+  "license": "CC-BY-4.0"
+}
