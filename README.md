@@ -23,8 +23,8 @@ session and `flock` to run. No Chromium, JVM or Python process runs in the
 background. Python and GStreamer are only needed to recreate audio assets.
 
 The installer creates `~/.local/bin/ticktack`, a GNOME application-launcher entry,
-a user systemd service and the GNOME extension. Playback starts only on request;
-it is not enabled at login. GNOME may require a new login to discover a newly
+a user systemd service and the GNOME extension. Playback starts on request and remembers its enabled state across logout and
+reboot. Login restores playback only if it was last enabled. GNOME may require a new login to discover a newly
 installed local extension. Avoid restarting a working Wayland session for this.
 The installer also copies license/credit documents to `~/.local/share/ticktack/`
 (or `$XDG_DATA_HOME/ticktack/`).
@@ -53,6 +53,9 @@ The application-launcher entry toggles playback. The panel extension has a maste
 switch, independent ticking/chime volume sliders, a quarter-hour chime switch,
 a Listen now submenu and Credits and licenses. Disabling the extension leaves
 playback available through the CLI and launcher.
+
+The master switch, CLI start/stop, launcher and auditions save playback intent.
+Logout stops the audio service without clearing that preference.
 
 Settings are plain files under `~/.config/ticktack/` (or
 `$XDG_CONFIG_HOME/ticktack/`). Defaults: ticking 35%, chime volume 35%, scheduled
@@ -126,7 +129,7 @@ handshake and played the first-quarter audition.
 ## Uninstall
 
 Stop playback and disable the extension. Remove `~/.local/bin/ticktack`,
-`~/.config/systemd/user/ticktack.service`,
+`~/.config/systemd/user/ticktack.service`, `~/.config/autostart/ticktack.desktop`,
 `~/.local/share/applications/ticktack.desktop`,
 `~/.local/share/gnome-shell/extensions/ticktack@sergeych.local` and
 `~/.local/share/ticktack`; run `systemctl --user daemon-reload`.

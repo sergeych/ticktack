@@ -3,18 +3,36 @@
 # Copyright (c) 2026 sergeych and Ticktack contributors
 set -eu
 base=$(CDPATH= cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd)
+# Keep user intent separate from the service state: logout stops audio, not intent.
+set_playback() {
+    systemctl --user "$1" ticktack.service
+    settings="${XDG_CONFIG_HOME:-$HOME/.config}/ticktack"
+    mkdir -p "$settings"
+    saved=$(mktemp "$settings/.playback-enabled.XXXXXX")
+    printf '%s\n' "$2" > "$saved"
+    mv -f "$saved" "$settings/playback-enabled"
+}
 case "${1:-toggle}" in
     credits) exec xdg-open "$base/credits.html" ;;
-    start|stop) exec systemctl --user "$1" ticktack.service ;;
-    toggle)
-        # Serialize concurrent launcher clicks; systemd owns the actual process lifetime.
+    start|stop|toggle|restore)
         exec 9>"${XDG_RUNTIME_DIR:?}/ticktack-toggle.lock"
         flock 9
-        if systemctl --user is-active --quiet ticktack.service; then
-            systemctl --user stop ticktack.service
-        else
-            systemctl --user start ticktack.service
-        fi ;;
+        case "${1:-toggle}" in
+            start) set_playback start 1 ;;
+            stop) set_playback stop 0 ;;
+            restore)
+                settings="${XDG_CONFIG_HOME:-$HOME/.config}/ticktack"
+                if [ -f "$settings/playback-enabled" ] &&
+                   [ "$(cat "$settings/playback-enabled")" = 1 ]; then
+                    systemctl --user start ticktack.service
+                fi ;;
+            toggle)
+                if systemctl --user is-active --quiet ticktack.service; then
+                    set_playback stop 0
+                else
+                    set_playback start 1
+                fi ;;
+        esac ;;
     volume)
         if [ "$#" -gt 2 ]; then echo 'Usage: ticktack volume [0..100]' >&2; exit 2; fi
         shift
@@ -41,7 +59,7 @@ case "${1:-toggle}" in
                 case "${2:-3}" in [1-9]|1[0-2]) ;; *) echo 'Hour must be 1..12' >&2; exit 2 ;; esac ;;
             *) echo 'Usage: ticktack chime-test [15|30|45|hour [1..12]]' >&2; exit 2 ;;
         esac
-        systemctl --user start ticktack.service
+        "$base/ticktack" start
         # --play watches settings before creating the PipeWire stream. Wait for service
         # readiness using systemd's notification protocol, not a sleep or status loop.
         if [ "$#" = 0 ]; then set -- hour 3; fi

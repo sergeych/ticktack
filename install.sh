@@ -5,7 +5,7 @@ set -eu
 base=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 config=${XDG_CONFIG_HOME:-$HOME/.config}
 data=${XDG_DATA_HOME:-$HOME/.local/share}
-mkdir -p "$base/bin" "$HOME/.local/bin" "$config/systemd/user" "$config/ticktack" "$data/applications"
+mkdir -p "$base/bin" "$HOME/.local/bin" "$config/systemd/user" "$config/ticktack" "$data/applications" "$config/autostart"
 cc -std=c11 -Os -Wall -Wextra -Werror -Wl,-z,relro,-z,now -o "$base/bin/.ticktack-audio.new" "$base/ticktack.c"
 strip "$base/bin/.ticktack-audio.new"
 mv "$base/bin/.ticktack-audio.new" "$base/bin/ticktack-audio"
@@ -17,6 +17,9 @@ if [ ! -e "$config/ticktack/chime-enabled" ]; then "$base/bin/ticktack-audio" --
 cat > "$config/systemd/user/ticktack.service" <<EOF
 [Unit]
 Description=Ticktack pendulum clock
+PartOf=graphical-session.target
+Wants=pipewire.service
+After=pipewire.service
 
 [Service]
 Type=notify
@@ -25,6 +28,23 @@ ExecStart="$base/bin/ticktack-audio" --play "$base/sounds/04-nightcustard-aligne
 KillMode=control-group
 TimeoutStopSec=3
 NoNewPrivileges=yes
+EOF
+# Migrate an existing running installation without changing a saved preference.
+if [ ! -e "$config/ticktack/playback-enabled" ]; then
+    if systemctl --user is-active --quiet ticktack.service; then
+        printf '1\n' > "$config/ticktack/playback-enabled"
+    else
+        printf '0\n' > "$config/ticktack/playback-enabled"
+    fi
+fi
+cat > "$config/autostart/ticktack.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Ticktack playback restore
+Exec="$HOME/.local/bin/ticktack" restore
+OnlyShowIn=GNOME;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
 EOF
 cat > "$data/applications/ticktack.desktop" <<EOF
 [Desktop Entry]
